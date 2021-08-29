@@ -1,0 +1,88 @@
+{
+    "extension_schema": {
+        "id": "PII3QUR",
+        "type": "extension_schema",
+        "summary": "Slack V2",
+        "self": "https://api.pagerduty.com/extension_schemas/PII3QUR",
+        "html_url": null,
+        "key": "slacktion_v2",
+        "label": "Slack V2",
+        "description": "Receive incident updates in a Slack channel of your choice. Acknowledge or resolve them directly from Slack.",
+        "url": "https://nbisqi5y8c.execute-api.us-west-2.amazonaws.com/prod/oet?oet=slacktions-v2",
+        "guide_url": "https://support.pagerduty.com/docs/slack-integration-guide",
+        "icon_url": "https://s3.amazonaws.com/pdpartner/slack_logo_new.png",
+        "logo_url": "https://s3.amazonaws.com/pdpartner/slack_logo_new.png",
+        "features": [],
+        "authorizable": true,
+        "config": {
+            "notify_types": {
+                "label": "Send new channel notification for these actions",
+                "type": "multicheckbox",
+                "empty_text": "Triggers only",
+                "default": {
+                    "resolve": true,
+                    "trigger": true,
+                    "escalate": true,
+                    "acknowledge": true,
+                    "assignments": true,
+                    "annotate": true
+                },
+                "help_tip": "All incidents from this service will send a trigger notification to your chosen Slack Channel, and the selected options will send additional short updates. “Assignment changes” includes reassigns, escalations, and unacknowledgements.",
+                "options": [
+                    {
+                        "label": "Escalate",
+                        "value": "escalate"
+                    },
+                    {
+                        "label": "Resolves",
+                        "value": "resolve"
+                    },
+                    {
+                        "label": "Acknowledgements",
+                        "value": "acknowledge"
+                    },
+                    {
+                        "label": "Reassignment",
+                        "value": "assignments"
+                    },
+                    {
+                        "label": "Notes",
+                        "value": "annotate"
+                    }
+                ]
+            },
+            "urgency": {
+                "label": "Urgency",
+                "type": "multicheckbox",
+                "empty_text": "Both",
+                "default": {
+                    "high": true,
+                    "low": true
+                },
+                "help_tip": "If you only want this channel to receive notifications for High urgency incidents, select 'High'",
+                "options": [
+                    {
+                        "label": "High",
+                        "value": "high"
+                    },
+                    {
+                        "label": "Low",
+                        "value": "low"
+                    }
+                ]
+            }
+        },
+        "send_types": [
+            "trigger",
+            "acknowledge",
+            "resolve",
+            "delegate",
+            "escalate",
+            "unacknowledge",
+            "assign",
+            "annotate"
+        ],
+        "addon": null,
+        "buttons": []
+    }
+}

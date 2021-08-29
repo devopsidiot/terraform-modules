@@ -1,0 +1,4 @@
+# This file should never be committed - make sure to exclude it in .gitignore.
+# Run ./encrypt to output an encrypted yaml file hat an be safely committed to repo.
+username: admin
+password: somecrazypassword

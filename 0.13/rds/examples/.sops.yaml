@@ -1,0 +1,4 @@
+---
+creation_rules:
+  # replace with valid KMS ARN
+  - kms: '<valid ARN>'

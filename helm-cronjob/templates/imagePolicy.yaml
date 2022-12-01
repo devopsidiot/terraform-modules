@@ -1,0 +1,26 @@
+{{- if .Values.image.internal }}
+---
+apiVersion: image.toolkit.fluxcd.io/v1alpha2
+kind: ImagePolicy
+metadata:
+  name: {{ template "devopsidiot-cronjob.fullname" . }}
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: {{ template "devopsidiot-cronjob.fullname" . }}
+  {{- if .Values.filterTags.enabled }}
+  filterTags:
+    pattern: "{{ .Values.filterTags.pattern }}"
+    {{- if .Values.filterTags.extractTimestamps }}
+    extract: "$ts"
+    {{- end }}
+  {{- end }}
+  policy:
+    {{- if .Values.imagePolicy.semver }}
+    semver:
+      range: "{{ .Values.imagePolicy.semverRange }}"
+    {{- else }}
+    numerical:
+      order: asc
+    {{- end }}
+{{- end }}    

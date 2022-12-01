@@ -1,0 +1,63 @@
+---
+# Default values for helm-cronjob
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+cronSchedule: {}
+
+image:
+  internal: true
+  repoName: {}
+  name: placeholder
+  tag: placeholder
+  pullPolicy: IfNotPresent
+
+filterTags:
+  enabled: false
+  pattern: {}
+  extractTimestamps: false
+  
+imagePolicy:
+  semver: true
+  semverRange: {}
+
+applicationVariables:
+  namedConfigMap: false
+  namedSecret: false
+  sharedSecretName: {}
+  sharedConfigMapName: {}
+
+serviceAccount:
+  enabled: true
+  
+awsRegion: "us-east-1"
+accountNumber: "11111111111"
+
+ecrSecret: "ecr-credentials"
+repoBranch: "integration"
+environment: {}
+territory: {}
+businessRegion: {}
+
+domainName: {}
+vpnRegionalWhiteListACL: {}
+publicBotControlACL: {}
+
+resources: {}
+# We usually recommend not to specify default resources and to leave this as a conscious
+# choice for the user. This also increases chances charts run on environments with little
+# resources, such as Minikube. If you do want to specify resources, uncomment the following
+# lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+# limits:
+#  cpu: 100m
+#  memory: 128Mi
+# requests:
+#  cpu: 100m
+#  memory: 128Mi
+
+nodeSelector:
+  karpenter.sh/provisioner-name: default
+
+tolerations: []
+
+affinity: {}

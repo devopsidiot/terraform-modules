@@ -1,0 +1,27 @@
+{{- if .Values.image.internal }}
+---
+apiVersion: image.toolkit.fluxcd.io/v1alpha2
+kind: ImageUpdateAutomation
+metadata:
+  name: {{ template "devopsidiot-cronjob.fullname" . }}
+  namespace: flux-system
+spec:
+  interval: 1m0s
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  git:
+    checkout:
+      ref:
+        branch: {{ .Values.repoBranch }}
+    commit:
+      author:
+        email: fluxcdbot@users.noreply.github.com
+        name: fluxcdbot
+      messageTemplate: '{{`{{range .Updated.Images}}{{println .}}{{end}} [skip ci]`}}'
+    push:
+      branch: {{ .Values.repoBranch }}
+  update:
+    path: {{ template "devopsidiot-cronjob.flux-path" .}}
+    strategy: Setters
+{{- end }}    

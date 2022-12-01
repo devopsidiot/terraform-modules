@@ -1,0 +1,57 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ template "devopsidiot-cronjob.fullname" . }}
+  labels:
+    app: {{ template "devopsidiot-cronjob.name" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  schedule: '{{ required "A valid .Values.cronSchedule entry required" .Values.cronSchedule }}'
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: {{ template "devopsidiot-cronjob.name" . }}
+            image: "{{ .Values.image.name }}:{{ .Values.image.tag }}"
+            imagePullPolicy: {{ .Values.image.pullPolicy }}
+            envFrom:
+            {{- if .Values.applicationVariables.sharedConfigMapName }}
+            - configMapRef:
+                name: {{ .Values.applicationVariables.sharedConfigMapName }}
+            {{- end }}
+            {{- if .Values.applicationVariables.sharedSecretName }}
+            - secretRef:
+                name: {{ .Values.applicationVariables.sharedSecretName }}
+            {{- end }}
+            {{- if or (.Values.applicationVariables.namedConfigMap) (.Values.applicationVariables.namedSecret) }}
+            {{- if .Values.applicationVariables.namedConfigMap }}
+            - configMapRef:
+                name: {{ template "devopsidiot-cronjob.name" . }}
+            {{- end }}
+            {{- if .Values.applicationVariables.namedSecret }}
+            - secretRef:
+                name: {{ template "devopsidiot-cronjob.name" . }} 
+            {{- end }}
+            {{- end }}
+            resources:
+{{ toYaml .Values.resources | indent 14 }}
+          restartPolicy: OnFailure
+          {{- if .Values.serviceAccount.enabled }}
+          serviceAccountName: {{ template "devopsidiot-cronjob.name" . }}
+          {{- end }}
+{{- with .Values.nodeSelector }}
+          nodeSelector:
+{{ toYaml . | indent 12 }}
+          {{- end }}
+          {{- with .Values.affinity }}
+          affinity:
+{{ toYaml . | indent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+{{ toYaml . | indent 12 }}
+          {{- end }}

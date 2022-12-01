@@ -1,0 +1,17 @@
+{{- if .Values.image.internal }}
+---
+apiVersion: image.toolkit.fluxcd.io/v1alpha1
+kind: ImageRepository
+metadata:
+  name: {{ template "devopsidiot-deployment.fullname" . }}
+  namespace: flux-system
+spec:
+  {{- if .Values.image.repoName }}
+  image: '{{ .Values.accountNumber }}.dkr.ecr.{{ .Values.awsRegion }}.amazonaws.com/{{ .Values.image.repoName }}'
+  {{- else }}
+  image: '{{ .Values.accountNumber }}.dkr.ecr.{{ .Values.awsRegion }}.amazonaws.com/{{ template "devopsidiot-deployment.name" . }}'
+  {{- end }}
+  interval: 1m0s
+  secretRef:
+    name: {{ .Values.ecrSecret }}
+{{- end }}

@@ -1,0 +1,12 @@
+{{- if .Values.serviceAccount.enabled }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ template "devopsidiot-deployment.name" . }}
+  labels:
+    app: {{ template "devopsidiot-deployment.name" . }}
+  annotations:
+    eks.amazonaws.com/role-arn: 'arn:aws:iam::{{ .Values.accountNumber }}:role/{{ template "devopsidiot-deployment.name" . }}-role'
+automountServiceAccountToken: true
+{{- end }}

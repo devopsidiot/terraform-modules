@@ -1,0 +1,20 @@
+{{- if or (.Values.service.enabled) (.Values.ingress.enabled) }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "devopsidiot-deployment.fullname" . }}
+  labels:
+    app: {{ template "devopsidiot-deployment.name" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  type: {{ .Values.service.type | default "NodePort" }}
+  ports:
+    - port: {{ .Values.service.port | default 8080 }}
+      targetPort: {{ .Values.service.port | default 8080 }}
+      protocol: TCP
+  selector:
+    app: {{ template "devopsidiot-deployment.name" . }}
+    release: {{ .Release.Name }}
+{{- end }}

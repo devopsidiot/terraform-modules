@@ -1,0 +1,84 @@
+---
+# Default values for helm-deployment
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+minReplicaCount: 2
+maxReplicaCount: 3
+minAvailable: 1
+
+image:
+  internal: true
+  repoName: {}
+  name: placeholder
+  tag: placeholder
+  pullPolicy: IfNotPresent
+
+filterTags:
+  enabled: false
+  pattern: {}
+  extractTimestamps: false
+
+imagePolicy:
+  semver: true
+  semverRange: {}
+
+ingress:
+  nonRootHealthCheck: ""
+  enabled: false
+  externalALB: false
+  extraHost: ""
+  validStatusCodes: ""
+  acl: 
+    enabled: false
+    arn: vpnRegionalWhiteList
+    # either of: 
+    # vpnRegionalWhiteList - internet-facing, only accessible from VPN
+    # publicBotControl - internet-facing, publicly accessible
+
+applicationVariables:
+  namedConfigMap: false
+  namedSecret: false
+  sharedSecretName: {}
+  sharedConfigMapName: {}
+
+service:
+  enabled: false
+  livenessPath: "/healthcheck"
+  readinessPath: "/healthcheck"
+  type: NodePort
+  port: 8080
+
+serviceAccount:
+  enabled: true
+
+ecrSecret: "ecr-credentials"
+repoBranch: "integration"
+awsRegion: "us-east-1"
+accountNumber: "11111111111"
+environment: "default"
+territory: "default"
+businessRegion: "default"
+
+domainName: {}
+vpnRegionalWhiteListACL: {}
+publicBotControlACL: {}
+
+resources:
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  limits:
+    cpu: 128m
+    memory: 128Mi
+  requests:
+    cpu: 128m
+    memory: 128Mi
+
+nodeSelector:
+  karpenter.sh/provisioner-name: default
+
+tolerations: []
+
+affinity: {}

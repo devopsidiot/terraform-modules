@@ -1,0 +1,53 @@
+{{- if .Values.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ template "devopsidiot-deployment.fullname" . }}
+  annotations:
+    kubernetes.io/ingress.class: alb
+    {{- if .Values.ingress.externalALB }}
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    {{- end }}
+    {{- if .Values.ingress.nonRootHealthCheck }}
+    alb.ingress.kubernetes.io/healthcheck-path: {{.Values.ingress.nonRootHealthCheck }}
+    {{- end }}
+    {{- if .Values.ingress.validStatusCodes }}
+    alb.ingress.kubernetes.io/success-codes: {{ .Values.ingress.validStatusCodes }}
+    {{- end }}
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/load-balancer-name: "{{ template "devopsidiot-deployment.name" . }}"
+    external-dns.alpha.kubernetes.io/hostname: "{{ template "devopsidiot-deployment.name" . }}.{{ .Values.domainName }}"
+    alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS-1-2-Ext-2018-06
+    {{- if .Values.ingress.acl.enabled }}
+    {{- if eq .Values.ingress.acl.arn "publicBotControl"}}
+    alb.ingress.kubernetes.io/wafv2-acl-arn: "arn:aws:wafv2:{{ .Values.awsRegion }}:{{ .Values.accountNumber }}:regional/webacl/{{ .Values.publicBotControlACL }}"
+    {{- else if eq .Values.ingress.acl.arn "vpnRegionalWhiteList"}}
+    alb.ingress.kubernetes.io/wafv2-acl-arn: "arn:aws:wafv2:{{ .Values.awsRegion }}:{{ .Values.accountNumber }}:regional/webacl/{{ .Values.vpnRegionalWhiteListACL }}"
+    {{- end }}
+    {{- end }}
+spec:
+  rules:
+    - host: "{{ template "devopsidiot-deployment.name" . }}.{{ .Values.domainName }}"
+      http:
+        paths:
+          - path: /*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: {{ template "devopsidiot-deployment.fullname" . }}
+                port:
+                  number: {{ .Values.service.port | default 8080 }}
+    {{- if .Values.ingress.extraHost }}
+    - host: "{{ .Values.ingress.extraHost }}"
+      http:
+        paths:
+          - path: /*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: {{ template "devopsidiot-deployment.fullname" . }}
+                port:
+                  number: {{ .Values.service.port | default 8080 }}
+    {{- end }}
+{{- end }}

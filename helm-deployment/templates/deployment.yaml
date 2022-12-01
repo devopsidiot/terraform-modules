@@ -1,0 +1,85 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "devopsidiot-deployment.fullname" . }}
+  labels:
+    app: {{ template "devopsidiot-deployment.name" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: {{ template "devopsidiot-deployment.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "devopsidiot-deployment.name" . }}
+        release: {{ .Release.Name }}
+    spec:
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: {{ template "devopsidiot-deployment.name" . }}
+      containers:
+        - name: {{ template "devopsidiot-deployment.name" . }}
+          image: "{{ .Values.image.name }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+          - name: RUN_APP
+            value: {{ template "devopsidiot-deployment.name" . }}
+          envFrom:
+          {{- if .Values.applicationVariables.sharedConfigMapName }}
+          - configMapRef:
+              name: {{ .Values.applicationVariables.sharedConfigMapName }}
+          {{- end }}
+          {{- if .Values.applicationVariables.sharedSecretName }}
+          - secretRef:
+              name: {{ .Values.applicationVariables.sharedSecretName }}
+          {{- end }}
+          {{- if or (.Values.applicationVariables.namedConfigMap) (.Values.applicationVariables.namedSecret) }}
+          {{- if .Values.applicationVariables.namedConfigMap }}
+          - configMapRef:
+              name: {{ template "devopsidiot-deployment.name" . }}
+          {{- end }}
+          {{- if .Values.applicationVariables.namedSecret }}
+          - secretRef:
+              name: {{ template "devopsidiot-deployment.name" . }} 
+          {{- end }}
+          {{- end }}
+          {{- if .Values.service.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.service.livenessPath | default "/healthcheck" }}
+              port: http
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.service.readinessPath | default "/healthcheck" }}
+              port: http
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port | default 8080 }}
+              protocol: TCP
+          {{- end }}
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      {{- if .Values.serviceAccount.enabled }}
+      serviceAccountName: {{ template "devopsidiot-deployment.name" . }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+      {{- end }}

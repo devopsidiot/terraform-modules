@@ -1,0 +1,80 @@
+name: Build and Push to Prod
+
+on:
+  workflow_call:
+    inputs:
+      project:
+        required: false
+        type: string
+      terraform:
+        required: false
+        type: boolean
+        default: false
+      tf_version:
+        required: false
+        type: string
+        default: 0.12.31
+    secrets:
+      RELEASE_WORKFLOW_TOKEN:
+        required: true
+      AWS_CREDENTIALS_FILE:
+        required: true
+      ID_RSA:
+        required: true
+
+env:
+  CI: true
+
+jobs:
+  deploy-Prd:
+    env:
+      PROJECT: ${{ inputs.project }}
+      ENV: prd
+      PROMOTION_TAG: stg-promote-prd
+      ACCOUNT_ID: 215691521637
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Git checkout
+        id: checkout
+        uses: actions/checkout@v3
+      
+      - uses: hashicorp/setup-terraform@v2
+        if: ${{ inputs.terraform == true }}
+        with:
+          terraform_version: ${{ inputs.tf_version }}
+          terraform_wrapper: false
+
+      - name: AWS Credentials
+        run: |
+          mkdir -p ~/.aws
+          touch ~/.aws/credentials
+          echo "${{secrets.AWS_CREDENTIALS_FILE}}" > ~/.aws/credentials
+          
+      - name: Setup SSH Keys and known_hosts
+        #  Copied from https://github.com/maddox/actions/blob/master/ssh/entrypoint.sh
+        run: |
+          SSH_PATH="$HOME/.ssh"
+          mkdir -p "$SSH_PATH"
+          touch "$SSH_PATH/known_hosts"
+          echo "${{secrets.ID_RSA}}" > "$SSH_PATH/id_rsa"
+          chmod 700 "$SSH_PATH"
+          ssh-keyscan github.com >> "$SSH_PATH/known_hosts"
+          chmod 600 "$SSH_PATH/known_hosts"
+          chmod 600 "$SSH_PATH/id_rsa"
+          eval $(ssh-agent)
+          ssh-add "$SSH_PATH/id_rsa"
+          
+      - name: Set Version Env
+        id: set-version
+        run: echo "VERSION=${GITHUB_REF##*/}" >> $GITHUB_ENV
+        
+      - name: Tag Promotion Image
+        id: tag-promotion
+        run: make prod-tag
+        
+      - name: Deploy to Envs
+        if: ${{ inputs.terraform == true }}
+        id: env-deploy
+        run: make apply  

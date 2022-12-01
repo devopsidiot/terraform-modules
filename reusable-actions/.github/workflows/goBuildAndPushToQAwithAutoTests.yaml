@@ -1,0 +1,161 @@
+name: Go Build and Release to QA then do Automated Testing
+on:
+  workflow_call:
+    inputs:
+      branch:
+        required: true
+        type: string
+      project:
+        required: false
+        type: string  
+    secrets:
+      RELEASE_WORKFLOW_TOKEN:
+        required: true
+      AWS_CREDENTIALS_FILE:
+        required: true
+      ID_RSA:
+        required: true
+        
+jobs:
+  build-deploy-QA-branch:
+    env:
+      PROJECT: ${{ inputs.project }}
+      ENV: qa
+      ACCOUNT_ID: 434130717112
+      GITHUB_USERNAME: omaze-cicd
+      GITHUB_TOKEN: ${{ secrets.RELEASE_WORKFLOW_TOKEN }}
+
+    runs-on: [ubuntu-latest]
+    
+    steps:
+      - name: Git checkout
+        id: checkout
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ inputs.branch }}
+
+      - name: AWS Credentials
+        run: |
+          mkdir -p ~/.aws
+          touch ~/.aws/credentials
+          echo "${{secrets.AWS_CREDENTIALS_FILE}}" > ~/.aws/credentials
+          
+      - name: Setup SSH Keys and known_hosts
+        #  Copied from https://github.com/maddox/actions/blob/master/ssh/entrypoint.sh
+        run: |
+          SSH_PATH="$HOME/.ssh"
+          mkdir -p "$SSH_PATH"
+          touch "$SSH_PATH/known_hosts"
+          echo "${{secrets.ID_RSA}}" > "$SSH_PATH/id_rsa"
+          chmod 700 "$SSH_PATH"
+          ssh-keyscan github.com >> "$SSH_PATH/known_hosts"
+          chmod 600 "$SSH_PATH/known_hosts"
+          chmod 600 "$SSH_PATH/id_rsa"
+          eval $(ssh-agent)
+          ssh-add "$SSH_PATH/id_rsa"
+          
+      # SHA maps to docker/setup-buildx-action@v1.0.4
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@5c0276ad2c777e56aaf2c95ef4ad5d1fa7bb4d1d
+        with:
+          install: true
+
+      - name: Cache Docker layers
+        uses: actions/cache@v2
+        id: cache
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+            
+      - name: Set version Tag
+        id: set-version-tag
+        run: echo "VERSION=${{ inputs.branch }}-$(date +%s)" >> $GITHUB_ENV
+       
+      - name: Build Docker Image
+        id: build
+        run: |
+          BUILD_ARGS='--cache-from "type=local,src=/tmp/.buildx-cache" \
+          --cache-to "type=local,dest=/tmp/.buildx-cache"' \
+          make build
+          
+      - name: Push Docker Image to QA
+        id: push-image-qa
+        run: make push
+
+    outputs:
+      imageTag: ${{ env.VERSION }}
+
+  autoTests:
+    needs: build-deploy-QA-branch
+    runs-on: qa-eks
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{ inputs.branch }}
+
+      - name: AWS Credentials
+        run: |
+          mkdir -p ~/.aws
+          touch ~/.aws/credentials
+          echo "${{secrets.AWS_CREDENTIALS_FILE}}" > ~/.aws/credentials
+          
+      - name: test dns connection
+        timeout-minutes: 2
+        run: until dig @10.4.0.2 omaze.com A +time=1; do sleep 2; done 
+
+      - name: update jq and curl
+        run: |
+          sudo apt update
+          sudo apt install -y jq
+          sudo apt install -y --only-upgrade curl
+
+      - name: install SOPS
+        run: |
+          curl -O -L -C - https://github.com/mozilla/sops/releases/download/v3.7.3/sops-v3.7.3.linux
+          sudo mv sops-v3.7.3.linux /usr/bin/sops
+          sudo chmod +x /usr/bin/sops
+
+      # INstall Node on the runner
+      - name: Install Node
+        uses: actions/setup-node@v1
+        with: 
+          node-version: '18.x'
+      
+      # Install the newman command line utility and also install the html extra reporter
+      - name: Install newman
+        run: |
+         npm install -g newman
+         npm install -g newman-reporter-htmlextra
+      
+      # Make directory to upload the test results
+      - name: Make Directory for results
+        run: mkdir -p testResults
+      
+      - name: Query healthcheck endpoint for version
+        run: |
+          GITHUB_REPO=${{ github.repository }}
+          until [[ "$(curl -sS https://${GITHUB_REPO##*/}.qa.omazedev.com/healthcheck -H "Accept: application/json" | jq -r '.version')" == "${{ needs.build-deploy-QA-branch.outputs.imageTag }}" ]]
+          do
+            sleep 30s
+          done  
+
+      - name: decrypt sops json
+        run: |
+          cd tests/qa
+          ../decrypt
+
+      # Run the POSTMAN collection
+      - name: Run POSTMAN collection
+        run: |
+         newman run ./tests/postman_collection.json -e ./tests/qa/postman_environment.decrypted.json -r htmlextra --reporter-htmlextra-export testResults/htmlreport.html --reporter-htmlextra-darkTheme  > testResults/runreport1.html
+      
+      # Upload the contents of Test Results directory to workspace
+      - name: Output the run Details
+        uses: actions/upload-artifact@v2
+        with: 
+         name: RunReports
+         path: testResults

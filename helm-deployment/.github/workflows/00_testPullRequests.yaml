@@ -1,0 +1,87 @@
+name: 00 (Auto) Lint Helm Chart
+
+on:  
+  pull_request:
+    branches:
+      - integration
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - unlocked
+    paths-ignore:
+      - ".github/**"
+      - ".githooks/**"
+      - "**.md"  
+      
+jobs:  
+  validation:
+    name: Helm Linting
+    runs-on: ubuntu-latest
+    
+    steps:  
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          token: ${{ secrets.RELEASE_WORKFLOW_TOKEN }}
+
+      - name: Setup SSH Keys and known_hosts
+        #  Copied from https://github.com/maddox/actions/blob/master/ssh/entrypoint.sh
+        run: |
+          SSH_PATH="$HOME/.ssh"
+          mkdir -p "$SSH_PATH"
+          touch "$SSH_PATH/known_hosts"
+          echo "${{secrets.ID_RSA}}" > "$SSH_PATH/id_rsa"
+          chmod 700 "$SSH_PATH"
+          ssh-keyscan github.com >> "$SSH_PATH/known_hosts"
+          chmod 600 "$SSH_PATH/known_hosts"
+          chmod 600 "$SSH_PATH/id_rsa"
+          eval $(ssh-agent)
+          ssh-add "$SSH_PATH/id_rsa"
+  
+      - uses: azure/setup-helm@v1
+        id: setup-helm
+        
+      - name: Helm Linting
+        id: helm-lint
+        run: |
+          unset t_std t_err
+  
+          eval "$( helm lint \
+                  2> >(t_err=$(cat); typeset -p t_err) \
+                   > >(t_std=$(cat); typeset -p t_std) )"
+  
+          t_err="${t_err//'%'/'%25'}"
+          t_err="${t_err//$'\n'/'%0A'}"
+          t_err="${t_err//$'\r'/'%0D'}"
+  
+          echo "::set-output name=stderr::$t_err"
+  
+          t_std="${t_std//'%'/'%25'}"
+          t_std="${t_std//$'\n'/'%0A'}"
+          t_std="${t_std//$'\r'/'%0D'}"
+  
+          echo "::set-output name=stdout::$t_std"
+
+      - name: Comment PR with Linting status
+        uses: actions/github-script@0.9.0
+        with:
+          github-token: ${{ secrets.RELEASE_WORKFLOW_TOKEN }}
+          script: |
+            const output = `#### Helm Linting 🖌\`${{ steps.helm-lint.outcome }}\`
+                        
+            <details><summary>Show Validation</summary>
+            
+            \`\`\`${{ steps.helm-lint.outputs.stderr }}${{ steps.helm-lint.outputs.stdout }}
+            \`\`\`
+            
+            </details>
+      
+            *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`, Workflow: \`${{ github.workflow }}\`*`;
+      
+            github.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })

@@ -1,0 +1,118 @@
+name: Deploy Release Candidate
+on:
+  workflow_call:
+    inputs:
+      project:
+        required: false
+        type: string
+      terraform:
+        type: boolean
+        required: false
+        default: false
+      tf_version:
+        required: false
+        type: string
+        default: 0.12.31
+    secrets:
+      RELEASE_WORKFLOW_TOKEN:
+        required: true
+      AWS_CREDENTIALS_FILE:
+        required: true
+      ID_RSA:
+        required: true  
+
+jobs:
+  push:
+    name: Build and push Docker image
+    runs-on: ubuntu-latest
+    env:
+      PROJECT: ${{ inputs.project }}
+      GITHUB_USERNAME: omaze-cicd
+      GITHUB_TOKEN: ${{ secrets.RELEASE_WORKFLOW_TOKEN }}
+    
+    steps:
+      - name: Git checkout
+        id: checkout
+        uses: actions/checkout@v3
+
+      - uses: hashicorp/setup-terraform@v2
+        if: ${{ inputs.terraform == true }}
+        with:
+          terraform_version: ${{ inputs.tf_version }}
+          terraform_wrapper: false
+
+      - name: AWS Credentials
+        run: |
+          mkdir -p ~/.aws
+          touch ~/.aws/credentials
+          echo "${{secrets.AWS_CREDENTIALS_FILE}}" > ~/.aws/credentials
+          
+      - name: Setup SSH Keys and known_hosts
+        #  Copied from https://github.com/maddox/actions/blob/master/ssh/entrypoint.sh
+        run: |
+          SSH_PATH="$HOME/.ssh"
+          mkdir -p "$SSH_PATH"
+          touch "$SSH_PATH/known_hosts"
+          echo "${{secrets.ID_RSA}}" > "$SSH_PATH/id_rsa"
+          chmod 700 "$SSH_PATH"
+          ssh-keyscan github.com >> "$SSH_PATH/known_hosts"
+          chmod 600 "$SSH_PATH/known_hosts"
+          chmod 600 "$SSH_PATH/id_rsa"
+          eval $(ssh-agent)
+          ssh-add "$SSH_PATH/id_rsa"
+      
+      - name: Set Version Env
+        id: set-version
+        run: echo "VERSION=${GITHUB_REF##*/}" >> $GITHUB_ENV
+
+      # SHA maps to docker/setup-buildx-action@v1.0.4
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@5c0276ad2c777e56aaf2c95ef4ad5d1fa7bb4d1d
+        with:
+          install: true
+
+      - name: Cache Docker layers
+        uses: actions/cache@v2
+        id: cache
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+            
+      - name: Build Stg Docker Image
+        id: build-stg-image
+        run: |
+          BUILD_ARGS='--cache-from "type=local,src=/tmp/.buildx-cache" \
+          --cache-to "type=local,dest=/tmp/.buildx-cache"' \
+          make build
+        
+      - name: Push Stg Docker image
+        id: push-stg-image
+        run: |
+          ENV=stg ACCOUNT_ID=909409879842 make push
+          
+      - name: Set QA Version
+        id: set-qa-version
+        run: |
+          echo "VERSION=${GITHUB_REF##*/}-$(date +%s)" >> $GITHUB_ENV
+          
+      - name: Build QA Docker Image from cache
+        id: build-qa-image
+        run: |
+          BUILD_ARGS='--cache-from "type=local,src=/tmp/.buildx-cache" \
+          --cache-to "type=local,dest=/tmp/.buildx-cache"' \
+          make build
+          
+      - name: Push QA Docker image
+        id: push-qa-image
+        run: |
+          ENV=qa ACCOUNT_ID=434130717112 make push
+          
+      - name: Deploy to Envs
+        if: ${{ inputs.terraform == true }}
+        id: env-deploy
+        run: |
+          ENV=qa make apply
+          ENV=stg make apply

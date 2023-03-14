@@ -2,4 +2,4 @@
 # Each line is a file pattern followed by one or more owners.
 
 # All files should be reviewed by SRE Team.
-* @omaze-ops/sre
+* sre

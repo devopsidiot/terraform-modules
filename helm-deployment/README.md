@@ -1,1 +1,1 @@
-# helm-omaze-deployment
+# helm-deployment

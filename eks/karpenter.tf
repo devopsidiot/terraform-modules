@@ -191,15 +191,33 @@ spec:
   limits:
     resources:
       cpu: 1000
-  provider:
-    instanceProfile: KarpenterNodeInstanceProfile-${var.cluster_name}
-    subnetSelector:
-      karpenter.sh/discovery: ${var.cluster_name}
-    securityGroupSelector:
-      Name: ${var.cluster_name}-eks_worker_sg
+  providerRef:
+    name: default
   ${var.use_spot_karpenter ? "" : "#" }ttlSecondsAfterEmpty: 30
   # 1209600 = 60 * 60 * 24 * 14 = two weeks of node being there
   ttlSecondsUntilExpired: 1209600
+YAML
+}
+
+resource "kubectl_manifest" "karpenterAWSnodeTemplate" {
+  yaml_body = <<YAML
+apiVersion: karpenter.k8s.aws/v1alpha1
+kind: AWSNodeTemplate
+metadata:
+  name: default
+spec:
+  instanceProfile: KarpenterNodeInstanceProfile-${var.cluster_name}
+  subnetSelector:
+    karpenter.sh/discovery: ${var.cluster_name}
+  securityGroupSelector:
+    Name: ${var.cluster_name}-eks_worker_sg
+  blockDeviceMappings:
+    - deviceName: /dev/xvda
+      ebs:
+        volumeSize: 50Gi
+        volumeType: gp3
+        iops: 3000
+        encrypted: true
 YAML
 }
 

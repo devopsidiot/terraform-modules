@@ -94,6 +94,7 @@ data "aws_iam_policy_document" "AWSLoadBalancerControllerIAMPolicy" {
       "elasticloadbalancing:DescribeTargetGroupAttributes",
       "elasticloadbalancing:DescribeTargetHealth",
       "elasticloadbalancing:DescribeTags",
+      "elasticloadbalancing:AddTags"
     ]
   }
 
@@ -341,39 +342,121 @@ data "aws_iam_policy_document" "ClusterAutoscalerIAMPolicy" {
   }
 }
 
-# I am open to moving this part around - I'm just experimenting with converging all the SOPS stuff into a single place
-# Well, at least the sops iam stuff
-data "aws_iam_policy_document" "sops_policy" {
-  statement {
-    actions   = ["ecr:GetAuthorizationToken"]
-    resources = ["*"]
-  }
-  statement {
-    actions   = ["kms:Decrypt"]
-    resources = ["*"]
-  }
+
+module "iam_assumable_role_ebs_csi" {
+  source                        = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
+  version                       = "4.7.0"
+  role_name                     = "ebs-csi-controller-${var.environment}"
+  create_role                   = true
+  provider_url                  = replace(module.eks.cluster_oidc_issuer_url, "https://", "")
+  role_policy_arns              = ["arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"]
+  oidc_fully_qualified_subjects = ["system:serviceaccount:kube-system:ebs-csi-controller-sa"]
+  depends_on = [
+    module.eks
+  ]
 }
 
-data "aws_iam_policy" "ec2_registry_ro" {
-  arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+# keda scaling role
+
+data "aws_iam_policy" "keda_scaling" {
+  arn = "arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess"
+}
+module "iam_assumable_role_keda" {
+  source                        = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
+  version                       = "4.7.0"
+  role_name                     = "keda-service-account-${var.environment}"
+  create_role                   = true
+  provider_urls                 = [module.eks.cluster_oidc_issuer_url]
+  role_policy_arns              = [data.aws_iam_policy.keda_scaling.arn]
+  oidc_fully_qualified_subjects = ["system:serviceaccount:keda:keda-operator"]
+  depends_on = [
+    module.eks
+  ]
 }
 
-resource "aws_iam_policy" "sops_policy" {
-  name = "sops-policy"
-  description = "Policy for sops decryption within EKS cluster"
-  policy = data.aws_iam_policy_document.sops_policy.json
+data "aws_iam_policy" "amazon_prometheus_remote_write_access" {
+  arn = "arn:aws:iam::aws:policy/AmazonPrometheusRemoteWriteAccess"
 }
 
-module "sops_iam_role" {
-  source  = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
-  version = "4.7.0"
-  role_name  = "sops-oidc-role"
-  create_role = true
-  provider_urls = [module.eks.cluster_oidc_issuer_url]
-  oidc_fully_qualified_subjects = ["system:serviceaccount:flux-system:kustomize-controller"]
-  role_policy_arns = concat([aws_iam_policy.sops_policy.arn, data.aws_iam_policy.ec2_registry_ro.arn])
-  number_of_role_policy_arns = 2
+data "aws_iam_policy" "aws_xray_write_only_access" {
+  arn = "arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess"
+}
 
+data "aws_iam_policy" "cloud_watch_agent_server_policy" {
+  arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+}
+
+module "iam_assumable_role_adot" {
+  source                        = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
+  version                       = "4.7.0"
+  role_name                     = "adot-service-account-${var.environment}"
+  create_role                   = true
+  provider_urls                 = [module.eks.cluster_oidc_issuer_url]
+  role_policy_arns              = concat([data.aws_iam_policy.amazon_prometheus_remote_write_access.arn, data.aws_iam_policy.aws_xray_write_only_access.arn, data.aws_iam_policy.cloud_watch_agent_server_policy.arn])
+  oidc_fully_qualified_subjects = ["system:serviceaccount:adot-collector"]
+  depends_on = [
+    module.eks
+  ]
+}
+
+# Create an IAM role for the Fargate profile
+resource "aws_iam_role" "fargate_execution_role" {
+  name = "${var.environment}-fargate-execution-role"
+
+  assume_role_policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "eks-fargate-pods.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
+EOF
+}
+
+resource "aws_iam_role_policy_attachment" "fargate_execution_role_attachment" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSFargatePodExecutionRolePolicy"
+  role       = aws_iam_role.fargate_execution_role.name
+}
+
+resource "aws_iam_policy" "fargate_logging_policy" {
+  name = "${var.environment}-fargate-logging-policy"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "logs:CreateLogStream",
+          "logs:CreateLogGroup",
+          "logs:DescribeLogStreams",
+          "logs:PutLogEvents"
+        ]
+        Effect   = "Allow"
+        Resource = "*"
+      },
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "fargate_logging_role_attachment" {
+  policy_arn = aws_iam_policy.fargate_logging_policy.arn
+  role       = aws_iam_role.fargate_execution_role.name
+}
+
+module "iam_assumable_role_efs_csi" {
+  source                        = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
+  version                       = "4.7.0"
+  role_name                     = "efs-csi-controller-${var.environment}"
+  create_role                   = true
+  provider_url                  = replace(module.eks.cluster_oidc_issuer_url, "https://", "")
+  role_policy_arns              = ["arn:aws:iam::aws:policy/service-role/AmazonEFSCSIDriverPolicy"]
+  oidc_fully_qualified_subjects = ["system:serviceaccount:kube-system:ebs-cfi-controller-sa"]
   depends_on = [
     module.eks
   ]

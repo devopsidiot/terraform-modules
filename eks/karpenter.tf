@@ -94,14 +94,15 @@ provider "helm" {
 }
 
 resource "helm_release" "karpenter" {
-  depends_on       = [module.eks.kubeconfig]
+  # depends_on       = [module.eks.kubeconfig]
   namespace        = "karpenter"
   create_namespace = true
 
   name       = "karpenter"
-  repository = "https://charts.karpenter.sh"
+  repository = "oci://public.ecr.aws/karpenter"
   chart      = "karpenter"
-  version    = "0.16.0"
+  version    = "v0.27.5"
+  timeout    = 1200
 
   set {
     name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
@@ -109,22 +110,27 @@ resource "helm_release" "karpenter" {
   }
 
   set {
-    name  = "clusterName"
+    name  = "settings.aws.clusterName"
     value = var.cluster_name
   }
 
   set {
-    name  = "clusterEndpoint"
+    name  = "settings.aws.clusterEndpoint"
     value = module.eks.cluster_endpoint
   }
 
   set {
-    name  = "aws.defaultInstanceProfile"
+    name  = "settings.aws.defaultInstanceProfile"
     value = aws_iam_instance_profile.karpenter.name
   }
 
   set {
-    name = "logLevel"
+    name  = "settings.aws.interruptionQueueName"
+    value = var.cluster_name
+  }
+
+  set {
+    name  = "logLevel"
     value = "debug"
   }
 }
@@ -193,7 +199,7 @@ spec:
       cpu: 1000
   providerRef:
     name: default
-  ${var.use_spot_karpenter ? "" : "#" }ttlSecondsAfterEmpty: 30
+  ${var.use_spot_karpenter ? "" : "#"}ttlSecondsAfterEmpty: 30
   # 1209600 = 60 * 60 * 24 * 14 = two weeks of node being there
   ttlSecondsUntilExpired: 1209600
 YAML
@@ -221,20 +227,20 @@ spec:
 YAML
 }
 
-resource "kubectl_manifest" "node_group_transition" {
-  yaml_body  = <<YAML
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: aws-auth
-  namespace: kube-system
-data:
-  mapRoles: |
-    - rolearn: ${module.eks.worker_iam_role_arn}
-      username: system:node:{{EC2PrivateDNSName}}
-      groups:
-        - system:bootstrappers
-        - system:nodes
-YAML
-  depends_on = [module.eks]
-}
+# resource "kubectl_manifest" "node_group_transition" {
+#   yaml_body  = <<YAML
+# apiVersion: v1
+# kind: ConfigMap
+# metadata:
+#   name: aws-auth
+#   namespace: kube-system
+# data:
+#   mapRoles: |
+#     - rolearn: ${module.eks.worker_iam_role_arn}
+#       username: system:node:{{EC2PrivateDNSName}}
+#       groups:
+#         - system:bootstrappers
+#         - system:nodes
+# YAML
+#   depends_on = [module.eks]
+# }

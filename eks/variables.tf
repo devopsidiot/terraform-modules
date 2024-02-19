@@ -1,6 +1,6 @@
 variable "eks_cluster_version" {
   type        = string
-  default     = "1.21"
+  default     = "1.26"
   description = "Version of kubernetes to deploy.  Must be in the list of supported versions"
 }
 variable "map_accounts" {
@@ -91,6 +91,31 @@ variable "gitignore" {
 }
 variable "use_spot_karpenter" {
   description = "Allow using spot instances for Karpenter provisioned nodes"
-  type = bool
-  default = false
+  type        = bool
+  default     = true
 }
+
+variable "api_namespaces" {
+  type        = list(string)
+  description = "Kubernetes namespaces to be managed by Fargate"
+  default     = []
+}
+# Uncomment below variables if using fargate.tf to create fargate profile
+# variable "fargate_namespaces" {
+#   type        = list(string)
+#   description = "Kubernetes namespaces to be managed by Fargate"
+#   default     = []
+# }
+# variable "fargateprofile_name" {
+#   type        = string
+#   default     = "default-fargateprofile"
+#   description = "The name of the fargateprofile be created."
+# }
+# Below variable is not need if using fargate.tf instead
+# variable "fargate_selectors" {
+#   type        = list(object({
+#     namespace = string
+#   }))
+#   description = "Kubernetes namespaces to be managed by Fargate"
+#   default     = []
+# }

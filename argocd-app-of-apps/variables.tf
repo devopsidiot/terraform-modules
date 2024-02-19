@@ -1,7 +1,7 @@
 variable "argo_environment" {
   type        = string
   default     = "rnd"
-  description = "Environment name that points to the ingress for the argocd server - example: argo.rnd.glorify-appdev.com"
+  description = "Environment name that points to the ingress for the argocd server - example: argo.rnd.devopsidiot.com"
 }
 variable "argo_initial_username" {
   type        = string
@@ -20,7 +20,7 @@ variable "workloads_directory" {
 }
 variable "githubapp_id" {
   type    = string
-  default = "glorify-bots"
+  default = "bots"
 }
 variable "github_ssh" {
   type    = string
